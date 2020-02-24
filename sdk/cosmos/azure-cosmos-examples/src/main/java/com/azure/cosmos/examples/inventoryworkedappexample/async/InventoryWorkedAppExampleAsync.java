@@ -2,12 +2,12 @@ package com.azure.cosmos.examples.inventoryworkedappexample.async;
 
 import com.azure.cosmos.*;
 import com.azure.cosmos.examples.common.AccountSettings;
-import com.azure.cosmos.examples.common.Families;
-import com.azure.cosmos.examples.common.Family;
+import com.azure.cosmos.examples.inventoryworkedappexample.common.*;
 import com.google.common.collect.Lists;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.Scanner;
 
@@ -24,7 +24,16 @@ public class InventoryWorkedAppExampleAsync {
 
     public void demoCleanupClose() {
         System.out.println("Cleanup and close out the application...");
-        if (client != null) client.close();
+        if (client != null) {
+            if (database != null) {
+                System.out.print("-Deleting database " + databaseName + " ...");
+                database.delete().block();
+                System.out.println("done.");
+            }
+            System.out.print("-Closing client ...");
+            client.close();
+            System.out.println("done.");
+        }
         System.out.println("Done.");
         exit(0);
     }
@@ -107,14 +116,12 @@ public class InventoryWorkedAppExampleAsync {
         System.out.println("Create database " + databaseName + " if not exists.");
 
         //  Create database if not exists
-        //  <CreateDatabaseIfNotExists>
         Mono<CosmosAsyncDatabaseResponse> databaseIfNotExists = client.createDatabaseIfNotExists(databaseName);
         databaseIfNotExists.flatMap(databaseResponse -> {
             database = databaseResponse.getDatabase();
             System.out.println("Checking database " + database.getId() + " completed!\n");
             return Mono.empty();
         }).block();
-        //  </CreateDatabaseIfNotExists>
     }
 
     private void createContainerIfNotExists() throws Exception {
@@ -123,7 +130,7 @@ public class InventoryWorkedAppExampleAsync {
         //  Create container if not exists
         //  <CreateContainerIfNotExists>
 
-        CosmosContainerProperties containerProperties = new CosmosContainerProperties(containerName, "/lastName");
+        CosmosContainerProperties containerProperties = new CosmosContainerProperties(containerName, "/productGUID");
         Mono<CosmosAsyncContainerResponse> containerIfNotExists = database.createContainerIfNotExists(containerProperties, 400);
 
         //  Create container with 400 RU/s
@@ -138,28 +145,16 @@ public class InventoryWorkedAppExampleAsync {
 
     private void initialDataIngestion() throws Exception {
 
-        Flux<Family> families=null;
-
         createDatabaseIfNotExists();
         createContainerIfNotExists();
 
-        Family andersenFamilyItem= Families.getAndersenFamilyItem();
-        Family wakefieldFamilyItem=Families.getWakefieldFamilyItem();
-        Family johnsonFamilyItem=Families.getJohnsonFamilyItem();
-        Family smithFamilyItem=Families.getSmithFamilyItem();
-
-        //  Setup family items to create
-        Flux<Family> familiesToCreate = Flux.just(andersenFamilyItem,
-            wakefieldFamilyItem,
-            johnsonFamilyItem,
-            smithFamilyItem);
-
-        //  <CreateItem>
+        //  Setup inventory items to create
+        Flux<InventoryItem> itemsToCreate = InventoryItems.getInventoryItemListRandomId();
 
         final CountDownLatch completionLatch = new CountDownLatch(1);
 
         //  Combine multiple item inserts, associated success println's, and a final aggregate stats println into one Reactive stream.
-        families.flatMap(family -> {
+        itemsToCreate.flatMap(family -> {
             return container.createItem(family);
         }) //Flux of item request responses
             .flatMap(itemResponse -> {
@@ -197,8 +192,6 @@ public class InventoryWorkedAppExampleAsync {
         } catch (InterruptedException err) {
             throw new AssertionError("Unexpected Interruption",err);
         }
-
-        //  </CreateItem>
     }
 }
 
